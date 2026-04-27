@@ -1,0 +1,200 @@
+@page "/games"
+@using FortniteStatsDesktop.Models
+@using FortniteStatsDesktop.Services
+@inject NavigationManager NavigationManager
+@inject MatchDataService MatchDataService
+@inject ReplayEventService ReplayEventService
+@implements IDisposable
+
+<PageTitle>Parties | Fortnite Stats</PageTitle>
+
+<div class="carbon-dashboard">
+    <div class="carbon-card">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2 class="title-font gradient-text mb-1">Historique des Parties</h2>
+                <span class="text-muted small">@_matches.Count partie(s) · @_validMatches.Count valide(s)</span>
+            </div>
+        </div>
+
+        @if (_isLoading)
+        {
+            <div class="text-center text-muted p-4">
+                <div class="spinner-border spinner-border-sm text-warning me-2" role="status"></div>
+                Chargement des parties...
+            </div>
+        }
+        else if (!_matches.Any())
+        {
+            <div class="text-center text-muted p-5">
+                <i class="bi bi-controller" style="font-size: 3rem; opacity: 0.2;"></i>
+                <div class="mt-3">Aucune partie trouvée. L'historique est vide.</div>
+                <div class="small mt-1" style="opacity:0.5;">Les nouvelles parties seront automatiquement détectées.</div>
+            </div>
+        }
+        else
+        {
+            <!-- Ligne d'en-têtes -->
+            <div class="d-flex align-items-center px-3 mb-2" style="font-size:0.72rem; letter-spacing:1px; color: var(--text-muted); text-transform:uppercase;">
+                <div style="width:140px;">Date</div>
+                <div style="width:130px;">Joueur</div>
+                <div class="flex-grow-1"></div>
+                <div style="width:80px; text-align:center;">TOP</div>
+                <div style="width:80px; text-align:center;">Kills</div>
+                <div style="width:100px; text-align:center;">Dégâts</div>
+                <div style="width:90px; text-align:center;">Précision</div>
+                <div style="width:24px;"></div>
+            </div>
+
+            <div class="match-list d-flex flex-column gap-2">
+                @foreach (var match in _matches)
+                {
+                    var isValid = IsValid(match);
+                    var placement = GetPlacement(match);
+                    var kills = GetKills(match);
+                    var placementColor = placement == 1 ? "text-warning" : placement <= 5 ? "text-success" : "text-white";
+                    var dateStr = match.MatchInfo.MatchDate != default
+                        ? match.MatchInfo.MatchDate.ToString("dd/MM HH:mm")
+                        : GetDateFromFile(match.FileName);
+
+                    @if (isValid)
+                    {
+                        <div class="match-item d-flex align-items-center px-3 py-3" @onclick="() => NavigateToDetail(match.PovStats.Id)">
+                            <div style="width:140px;">
+                                <div class="text-muted small mono-text">@dateStr</div>
+                            </div>
+                            <div style="width:130px;">
+                                <div class="text-white fw-bold text-truncate" style="font-size:0.9rem;" title="@match.PovStats.Username">@match.PovStats.Username</div>
+                            </div>
+                            <div class="flex-grow-1"></div>
+                            <div style="width:80px; text-align:center;">
+                                <span class="fw-bold @placementColor" style="font-size:1.1rem;">@placement</span>
+                            </div>
+                            <div style="width:80px; text-align:center;">
+                                <span class="fw-bold text-danger">@kills</span>
+                            </div>
+                            <div style="width:100px; text-align:center;">
+                                <span class="fw-bold text-white">@match.PovStats.DamageDealt</span>
+                            </div>
+                            <div style="width:90px; text-align:center;">
+                                <span class="text-white fw-medium" style="font-size:0.85rem;">@(match.PovStats.Accuracy.ToString("P1").Replace(" ", ""))</span>
+                            </div>
+                            <div style="width:24px; text-align:center;">
+                                <i class="bi bi-chevron-right text-muted" style="font-size:0.8rem;"></i>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <!-- Partie invalide : barrée en rouge -->
+                        <div class="match-item match-invalid d-flex align-items-center px-3 py-3">
+                            <div style="width:140px;">
+                                <div class="text-muted small mono-text" style="text-decoration:line-through;">@dateStr</div>
+                            </div>
+                            <div style="width:130px;">
+                                <div class="text-truncate" style="font-size:0.9rem; text-decoration:line-through; color: rgba(239,68,68,0.6);" title="@match.PovStats.Username">
+                                    @(string.IsNullOrWhiteSpace(match.PovStats.Username) ? "(sans nom)" : match.PovStats.Username)
+                                </div>
+                            </div>
+                            <div class="flex-grow-1"></div>
+                            <div class="text-muted" style="font-size:0.75rem; text-decoration:line-through; margin-right:24px;">Données invalides</div>
+                        </div>
+                    }
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .match-item {
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255,255,255,0.05);
+        border-radius: 8px;
+        transition: all 0.15s ease;
+    }
+
+    .match-item:not(.match-invalid) {
+        cursor: pointer;
+    }
+
+    .match-item:not(.match-invalid):hover {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(245, 158, 11, 0.25);
+        transform: translateX(3px);
+    }
+
+    .match-invalid {
+        border-color: rgba(239, 68, 68, 0.2);
+        background: rgba(239, 68, 68, 0.03);
+        opacity: 0.6;
+    }
+</style>
+
+@code {
+    private List<ParsedMatchData> _matches = new();
+    private List<ParsedMatchData> _validMatches = new();
+    private bool _isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ReplayEventService.OnNewMatchParsed += HandleNewMatch;
+        await LoadMatches();
+    }
+
+    private async Task HandleNewMatch(ParsedMatchData newMatch)
+    {
+        await LoadMatches();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadMatches()
+    {
+        _matches = (await MatchDataService.GetAllMatchesAsync())
+            .OrderByDescending(m => m.MatchInfo.MatchDate != default ? m.MatchInfo.MatchDate : DateTime.MinValue)
+            .ToList();
+        _validMatches = _matches.Where(IsValid).ToList();
+        _isLoading = false;
+    }
+
+    private bool IsValid(ParsedMatchData m) =>
+        !string.IsNullOrWhiteSpace(m.PovStats.Username) &&
+        m.Leaderboard.Any(l => l.Username == m.PovStats.Username) &&
+        GetPlacement(m) > 0;
+
+    private int GetPlacement(ParsedMatchData match)
+    {
+        var player = match.Leaderboard.FirstOrDefault(l => l.Username == match.PovStats.Username);
+        return player?.Rank ?? 0;
+    }
+
+    private int GetKills(ParsedMatchData match)
+    {
+        var player = match.Leaderboard.FirstOrDefault(l => l.Username == match.PovStats.Username);
+        return player?.Kills ?? 0;
+    }
+
+    private string GetDateFromFile(string fileName)
+    {
+        try
+        {
+            var parts = fileName.Replace(".json", "").Split('_');
+            if (parts.Length >= 3 && DateTime.TryParseExact(parts[^2] + parts[^1], "yyyyMMddHHmmss", null,
+                System.Globalization.DateTimeStyles.None, out var dt))
+                return dt.ToString("dd/MM HH:mm");
+        }
+        catch { }
+        return "—";
+    }
+
+    private void NavigateToDetail(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return;
+        NavigationManager.NavigateTo($"/games/{Uri.EscapeDataString(id)}");
+    }
+
+    public void Dispose()
+    {
+        ReplayEventService.OnNewMatchParsed -= HandleNewMatch;
+    }
+}

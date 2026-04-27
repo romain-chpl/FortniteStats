@@ -1,0 +1,38 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>
+        <OutputType>WinExe</OutputType>
+        <UseWPF>true</UseWPF>
+
+        <!-- Project Options -->
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>FortniteStatsDesktop</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Remove="FortniteStatsDesktop.slnx" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="FortniteReplayReader" Version="3.0.0" />
+        <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="10.*" />
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.*" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Update="wwwroot\css\app.css">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </Content>
+        <Content Update="wwwroot\css\bootstrap\bootstrap.min.css">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </Content>
+        <Content Update="wwwroot\index.html">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+
+</Project>

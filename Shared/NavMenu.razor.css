@@ -1,0 +1,21 @@
+.nav-scrollable {
+    display: block;
+    height: 100vh;
+    overflow-y: auto;
+}
+
+.navbar-toggler {
+    display: none; /* Hide the burger menu entirely for desktop app */
+}
+
+/* Custom scrollbar for sidebar */
+.nav-scrollable::-webkit-scrollbar {
+    width: 6px;
+}
+.nav-scrollable::-webkit-scrollbar-track {
+    background: transparent;
+}
+.nav-scrollable::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}

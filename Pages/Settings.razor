@@ -1,0 +1,108 @@
+@page "/settings"
+@using FortniteStatsDesktop.Services
+@inject SettingsService SettingsService
+
+<PageTitle>Paramètres | Fortnite Stats</PageTitle>
+
+<div class="carbon-dashboard">
+    <div class="carbon-card mb-4">
+        <h2 class="title-font gradient-text mb-2">Paramètres</h2>
+        <p style="color: var(--text-muted)">Configuration de l'application et préférences générales.</p>
+    </div>
+
+    <!-- Replays Directory Settings -->
+    <div class="carbon-card mb-4">
+        <h5 class="title-font text-white mb-4"><i class="bi bi-folder2-open text-warning me-2"></i> Dossier des Replays</h5>
+        
+        <div class="mb-3">
+            <label class="form-label text-muted small fw-bold">CHEMIN D'ACCÈS AUX REPLAYS FORTNITE</label>
+            <div class="d-flex gap-2">
+                <input type="text" class="form-control carbon-input flex-grow-1" @bind="SettingsService.CurrentSettings.ReplaysFolderPath" placeholder="C:\Users\Nom\AppData\Local\FortniteGame\Saved\Demos" />
+                <button class="btn primary-btn" @onclick="SaveSettings">Enregistrer</button>
+            </div>
+            <div class="form-text mt-2 text-muted" style="font-size: 0.8rem;">
+                Le système surveillera automatiquement ce dossier pour analyser vos nouvelles parties.
+            </div>
+        </div>
+    </div>
+
+    <!-- Utilisateur Settings -->
+    <div class="carbon-card mb-4">
+        <h5 class="title-font text-white mb-4"><i class="bi bi-person-badge text-warning me-2"></i> Joueur Principal</h5>
+        
+        <div class="mb-3">
+            <label class="form-label text-muted small fw-bold">PSEUDO EN JEU (EPIC GAMES)</label>
+            <div class="d-flex gap-2">
+                <input type="text" class="form-control carbon-input flex-grow-1" @bind="SettingsService.CurrentSettings.PlayerUsername" placeholder="Votre Pseudo" />
+                <button class="btn primary-btn" @onclick="SaveSettings">Enregistrer</button>
+            </div>
+            <div class="form-text mt-2 text-muted" style="font-size: 0.8rem;">
+                Ce pseudo sera utilisé pour vous identifier dans la liste des joueurs et pour générer vos statistiques personnelles avec précision.
+            </div>
+        </div>
+    </div>
+
+    <!-- Behavior Settings -->
+    <div class="carbon-card">
+        <h5 class="title-font text-white mb-4"><i class="bi bi-sliders text-info me-2"></i> Comportement</h5>
+
+        <div class="d-flex align-items-center justify-content-between p-3 rounded" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05);">
+            <div>
+                <div class="fw-bold text-white mb-1">Affichage Automatique</div>
+                <div class="text-muted small">Ouvrir automatiquement la page des détails à la fin d'une partie.</div>
+            </div>
+            <div class="form-check form-switch fs-4">
+                <input class="form-check-input" type="checkbox" role="switch" id="autoShowSwitch" @bind="SettingsService.CurrentSettings.AutoShowLatestGame" @bind:after="SaveSettings">
+            </div>
+        </div>
+    </div>
+
+    @if (_showSuccessMessage)
+    {
+        <div class="alert alert-success mt-4 p-3 d-flex align-items-center gap-2" style="background: rgba(16, 185, 129, 0.1); border: 1px solid var(--success); color: var(--success);">
+            <i class="bi bi-check-circle-fill"></i> Paramètres sauvegardés avec succès !
+        </div>
+    }
+</div>
+
+<style>
+    .carbon-input {
+        background: rgba(10, 10, 10, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: var(--text-main);
+        padding: 0.8rem 1rem;
+        transition: all 0.2s ease;
+    }
+
+    .carbon-input:focus {
+        background: rgba(26, 26, 26, 0.8);
+        border-color: var(--accent-color);
+        box-shadow: 0 0 0 0.25rem rgba(245, 158, 11, 0.25);
+        color: white;
+    }
+
+    .form-switch .form-check-input {
+        cursor: pointer;
+        background-color: rgba(255,255,255,0.2);
+        border: none;
+    }
+
+    .form-switch .form-check-input:checked {
+        background-color: var(--success);
+    }
+</style>
+
+@code {
+    private bool _showSuccessMessage = false;
+
+    private async Task SaveSettings()
+    {
+        await SettingsService.SaveSettingsAsync();
+        _showSuccessMessage = true;
+
+        // Hide message after 3 seconds
+        await Task.Delay(3000);
+        _showSuccessMessage = false;
+        StateHasChanged();
+    }
+}

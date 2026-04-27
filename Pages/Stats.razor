@@ -1,0 +1,420 @@
+@page "/stats"
+@using FortniteStatsDesktop.Models
+@using FortniteStatsDesktop.Services
+@inject MatchDataService MatchDataService
+@inject ReplayEventService ReplayEventService
+@implements IDisposable
+
+<PageTitle>Statistiques | Fortnite Stats</PageTitle>
+
+<div class="carbon-dashboard">
+
+    @if (_isLoading)
+    {
+        <div class="carbon-card text-center p-5">
+            <div class="spinner-border text-warning" role="status"></div>
+            <div class="text-muted mt-3">Chargement des statistiques...</div>
+        </div>
+    }
+    else if (!_validMatches.Any())
+    {
+        <div class="carbon-card text-center p-5">
+            <i class="bi bi-bar-chart-line" style="font-size:3rem; opacity:0.2;"></i>
+            <div class="text-muted mt-3">Aucune partie valide à analyser.</div>
+            <div class="small text-muted mt-2" style="opacity:0.5;">Jouez une partie puis relancez l'application pour voir vos stats.</div>
+        </div>
+    }
+    else
+    {
+        <!-- KPIs globaux - ligne 1 -->
+        <div class="row g-3 mb-3">
+            <div class="col-6 col-lg-3">
+                <div class="carbon-card text-center py-4">
+                    <div class="kpi-value text-warning">@_validMatches.Count</div>
+                    <div class="kpi-label">Parties analysées</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="carbon-card text-center py-4">
+                    <div class="kpi-value text-success">@_wins</div>
+                    <div class="kpi-label">Victoires</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="carbon-card text-center py-4">
+                    <div class="kpi-value text-danger">@_totalKills</div>
+                    <div class="kpi-label">Total Kills</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="carbon-card text-center py-4">
+                    <div class="kpi-value text-info">@_avgAccuracy</div>
+                    <div class="kpi-label">Précision Moy.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- KPIs - ligne 2 -->
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-lg-3">
+                <div class="carbon-card text-center py-4">
+                    <div class="kpi-value text-white">@_avgPlacement</div>
+                    <div class="kpi-label">TOP Moyen</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="carbon-card text-center py-4">
+                    <div class="kpi-value text-white">@_avgKills</div>
+                    <div class="kpi-label">Kills / Partie</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="carbon-card text-center py-4">
+                    <div class="kpi-value text-white">@_avgDamage</div>
+                    <div class="kpi-label">Dégâts Moy.</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="carbon-card text-center py-4">
+                    <div class="kpi-value text-white">@_totalDamage.ToString("N0")</div>
+                    <div class="kpi-label">Total Dégâts</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Graphique Kills par partie (div-based) -->
+        <div class="carbon-card mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h5 class="title-font text-white m-0">
+                    <i class="bi bi-crosshair text-danger me-2"></i>Kills par partie
+                </h5>
+                <span class="text-muted small mono-text">@_chartKills.Count dernières parties</span>
+            </div>
+            <div class="chart-container">
+                @for (int i = 0; i < _chartKills.Count; i++)
+                {
+                    var k = _chartKills[i];
+                    var maxK = _chartMaxKills;
+                    var heightPct = maxK > 0 ? (int)((double)k / maxK * 100) : 0;
+                    var barColor = k >= 5 ? "bar-red" : k >= 3 ? "bar-orange" : "bar-gray";
+                    var idx = i + 1;
+                    <div class="chart-bar-wrap">
+                        <div class="chart-value">@(k > 0 ? k.ToString() : "")</div>
+                        <div class="chart-bar-track">
+                            <div class="chart-bar @barColor" style="height:@(heightPct)%;"></div>
+                        </div>
+                        <div class="chart-label">@idx</div>
+                    </div>
+                }
+            </div>
+            <div class="d-flex gap-4 mt-3" style="font-size:0.72rem; color: var(--text-muted);">
+                <span><span class="legend-dot" style="background:#ef4444;"></span> 5+ kills</span>
+                <span><span class="legend-dot" style="background:#f59e0b;"></span> 3-4 kills</span>
+                <span><span class="legend-dot" style="background:#4b5563;"></span> 0-2 kills</span>
+            </div>
+        </div>
+
+        <!-- Graphique Placement par partie (div-based) -->
+        <div class="carbon-card mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h5 class="title-font text-white m-0">
+                    <i class="bi bi-trophy text-warning me-2"></i>Placement par partie
+                </h5>
+                <span class="text-muted small mono-text">meilleur = barre plus haute</span>
+            </div>
+            <div class="chart-container">
+                @for (int i = 0; i < _chartPlacements.Count; i++)
+                {
+                    var p = _chartPlacements[i];
+                    var maxP = _chartMaxPlacement;
+                    // Inversé : placement 1 = max hauteur
+                    var inverted = maxP - p + 1;
+                    var heightPct = maxP > 0 ? (int)((double)inverted / maxP * 100) : 0;
+                    var barColor = p == 1 ? "bar-gold" : p <= 5 ? "bar-green" : "bar-gray";
+                    var idx = i + 1;
+                    <div class="chart-bar-wrap">
+                        <div class="chart-value">@p</div>
+                        <div class="chart-bar-track">
+                            <div class="chart-bar @barColor" style="height:@(heightPct)%;"></div>
+                        </div>
+                        <div class="chart-label">@idx</div>
+                    </div>
+                }
+            </div>
+            <div class="d-flex gap-4 mt-3" style="font-size:0.72rem; color: var(--text-muted);">
+                <span><span class="legend-dot" style="background:#f59e0b;"></span> TOP 1</span>
+                <span><span class="legend-dot" style="background:#10b981;"></span> TOP 2-5</span>
+                <span><span class="legend-dot" style="background:#4b5563;"></span> Autres</span>
+            </div>
+        </div>
+
+        <!-- Précision & Matériaux barres horizontales -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <div class="carbon-card h-100">
+                    <h5 class="title-font text-white mb-4">
+                        <i class="bi bi-bullseye text-info me-2"></i>Précision par partie
+                    </h5>
+                    @foreach (var m in _validMatches)
+                    {
+                        var pct = Math.Min(1.0, m.PovStats.Accuracy);
+                        var w = (int)(pct * 100);
+                        var barCol = pct > 0.4 ? "#10b981" : pct > 0.25 ? "#f59e0b" : "#6b7280";
+                        var dateLabel = m.MatchInfo.MatchDate != default ? m.MatchInfo.MatchDate.ToString("dd/MM") : "—";
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted mono-text" style="font-size:0.72rem;">@dateLabel</span>
+                                <span class="text-white fw-bold" style="font-size:0.72rem;">@pct.ToString("P1").Replace(" ", "")</span>
+                            </div>
+                            <div class="hbar-track">
+                                <div class="hbar-fill" style="background:@barCol; width:@(w)%;"></div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="carbon-card h-100">
+                    <h5 class="title-font text-white mb-4">
+                        <i class="bi bi-hammer text-secondary me-2"></i>Matériaux par partie
+                    </h5>
+                    @{
+                        var maxMat = _validMatches.Max(x => x.PovStats.MaterialsUsed);
+                        if (maxMat == 0) maxMat = 1;
+                    }
+                    @foreach (var m in _validMatches)
+                    {
+                        var matPct = (int)((double)m.PovStats.MaterialsUsed / maxMat * 100);
+                        var dateLabel = m.MatchInfo.MatchDate != default ? m.MatchInfo.MatchDate.ToString("dd/MM") : "—";
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted mono-text" style="font-size:0.72rem;">@dateLabel</span>
+                                <span class="text-white fw-bold" style="font-size:0.72rem;">@m.PovStats.MaterialsUsed</span>
+                            </div>
+                            <div class="hbar-track">
+                                <div class="hbar-fill" style="background:#8b5cf6; width:@(matPct)%;"></div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Tableau récapitulatif complet -->
+        <div class="carbon-card">
+            <h5 class="title-font text-white mb-4">
+                <i class="bi bi-table text-muted me-2"></i>Récapitulatif détaillé
+            </h5>
+            <div class="table-responsive">
+                <table class="table table-dark table-borderless align-middle mb-0" style="background:transparent; font-size:0.82rem;">
+                    <thead style="border-bottom: 1px solid rgba(255,255,255,0.07);">
+                        <tr>
+                            <th class="text-muted fw-normal">Date</th>
+                            <th class="text-muted fw-normal text-center">TOP</th>
+                            <th class="text-muted fw-normal text-center">Kills</th>
+                            <th class="text-muted fw-normal text-center">Dégâts</th>
+                            <th class="text-muted fw-normal text-center">Précision</th>
+                            <th class="text-muted fw-normal text-center">Matériaux</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var m in _validMatches)
+                        {
+                            var placement = GetPlacement(m);
+                            var kills = GetKills(m);
+                            var pCol = placement == 1 ? "text-warning" : placement <= 5 ? "text-success" : "text-white";
+                            <tr style="border-bottom:1px solid rgba(255,255,255,0.03);">
+                                <td class="text-muted">@(m.MatchInfo.MatchDate != default ? m.MatchInfo.MatchDate.ToString("dd/MM HH:mm") : "—")</td>
+                                <td class="text-center fw-bold @pCol">@placement</td>
+                                <td class="text-center text-danger fw-bold">@kills</td>
+                                <td class="text-center text-white">@m.PovStats.DamageDealt</td>
+                                <td class="text-center text-white">@m.PovStats.Accuracy.ToString("P1").Replace(" ", "")</td>
+                                <td class="text-center text-white">@m.PovStats.MaterialsUsed</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot style="border-top:2px solid rgba(255,255,255,0.1);">
+                        <tr>
+                            <td class="text-muted fw-bold">Moyenne</td>
+                            <td class="text-center fw-bold text-warning">@_avgPlacement</td>
+                            <td class="text-center fw-bold text-danger">@_avgKills</td>
+                            <td class="text-center fw-bold text-white">@_avgDamage</td>
+                            <td class="text-center fw-bold text-info">@_avgAccuracy</td>
+                            <td class="text-center fw-bold text-white">@_avgMaterials</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .kpi-value {
+        font-size: 2.2rem;
+        font-weight: 900;
+        line-height: 1;
+        font-family: 'JetBrains Mono', monospace;
+    }
+    .kpi-label {
+        font-size: 0.72rem;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        margin-top: 0.4rem;
+    }
+
+    /* Graphiques verticaux */
+    .chart-container {
+        display: flex;
+        align-items: flex-end;
+        gap: 4px;
+        height: 150px;
+        padding-bottom: 24px;
+        position: relative;
+    }
+    .chart-bar-wrap {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex: 1;
+        height: 100%;
+        position: relative;
+    }
+    .chart-value {
+        font-size: 0.65rem;
+        color: rgba(255,255,255,0.7);
+        font-weight: bold;
+        text-align: center;
+        min-height: 14px;
+        line-height: 1;
+    }
+    .chart-bar-track {
+        flex: 1;
+        width: 100%;
+        display: flex;
+        align-items: flex-end;
+        padding: 2px;
+    }
+    .chart-bar {
+        width: 100%;
+        border-radius: 3px 3px 0 0;
+        min-height: 2px;
+        transition: height 0.5s ease;
+    }
+    .chart-label {
+        font-size: 0.6rem;
+        color: var(--text-muted);
+        text-align: center;
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+    }
+    .bar-red    { background: #ef4444; opacity: 0.85; }
+    .bar-orange { background: #f59e0b; opacity: 0.85; }
+    .bar-gold   { background: #f59e0b; opacity: 0.9; }
+    .bar-green  { background: #10b981; opacity: 0.85; }
+    .bar-gray   { background: #4b5563; opacity: 0.8; }
+
+    /* Barres horizontales */
+    .hbar-track {
+        background: rgba(255,255,255,0.06);
+        border-radius: 4px;
+        height: 6px;
+        overflow: hidden;
+    }
+    .hbar-fill {
+        height: 100%;
+        border-radius: 4px;
+        transition: width 0.6s ease;
+    }
+
+    .legend-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 4px;
+    }
+</style>
+
+@code {
+    private List<ParsedMatchData> _validMatches = new();
+    private bool _isLoading = true;
+
+    // KPI
+    private int _wins, _totalKills, _totalDamage;
+    private string _avgPlacement = "—", _avgKills = "—", _avgDamage = "—";
+    private string _avgAccuracy = "—", _avgMaterials = "—";
+
+    // Graphiques
+    private List<int> _chartKills = new();
+    private List<int> _chartPlacements = new();
+    private int _chartMaxKills = 1;
+    private int _chartMaxPlacement = 1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ReplayEventService.OnNewMatchParsed += HandleNewMatch;
+        await LoadStats();
+    }
+
+    private async Task HandleNewMatch(ParsedMatchData _)
+    {
+        await LoadStats();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadStats()
+    {
+        var all = await MatchDataService.GetAllMatchesAsync();
+        _validMatches = all
+            .Where(IsValid)
+            .OrderByDescending(m => m.MatchInfo.MatchDate != default ? m.MatchInfo.MatchDate : DateTime.MinValue)
+            .ToList();
+
+        if (!_validMatches.Any()) { _isLoading = false; return; }
+
+        var placements  = _validMatches.Select(GetPlacement).ToList();
+        var kills       = _validMatches.Select(GetKills).ToList();
+        var damages     = _validMatches.Select(m => m.PovStats.DamageDealt).ToList();
+        var accuracies  = _validMatches.Where(m => m.PovStats.Accuracy > 0).Select(m => m.PovStats.Accuracy).ToList();
+        var materials   = _validMatches.Select(m => m.PovStats.MaterialsUsed).ToList();
+
+        _wins         = placements.Count(p => p == 1);
+        _totalKills   = kills.Sum();
+        _totalDamage  = damages.Sum();
+        _avgPlacement = placements.Any() ? Math.Round(placements.Average(), 1).ToString("F1") : "—";
+        _avgKills     = kills.Any()      ? Math.Round(kills.Average(), 1).ToString("F1")      : "—";
+        _avgDamage    = damages.Any()    ? ((int)damages.Average()).ToString()                 : "—";
+        _avgAccuracy  = accuracies.Any() ? accuracies.Average().ToString("P1").Replace(" ", "") : "—";
+        _avgMaterials = materials.Any()  ? ((int)materials.Average()).ToString()               : "—";
+
+        // Graphiques sur les 20 dernières parties (ordre chronologique pour le graphe)
+        var recent = _validMatches.Take(20).ToList();
+        recent.Reverse(); // du plus ancien au plus récent sur le graphique
+        _chartKills      = recent.Select(GetKills).ToList();
+        _chartPlacements = recent.Select(GetPlacement).ToList();
+        _chartMaxKills      = Math.Max(1, _chartKills.Any() ? _chartKills.Max() : 1);
+        _chartMaxPlacement  = Math.Max(1, _chartPlacements.Any() ? _chartPlacements.Max() : 1);
+
+        _isLoading = false;
+    }
+
+    private bool IsValid(ParsedMatchData m) =>
+        !string.IsNullOrWhiteSpace(m.PovStats.Username) &&
+        m.Leaderboard.Any(l => l.Username == m.PovStats.Username) &&
+        GetPlacement(m) > 0;
+
+    private int GetPlacement(ParsedMatchData m) =>
+        m.Leaderboard.FirstOrDefault(l => l.Username == m.PovStats.Username)?.Rank ?? 0;
+
+    private int GetKills(ParsedMatchData m) =>
+        m.Leaderboard.FirstOrDefault(l => l.Username == m.PovStats.Username)?.Kills ?? 0;
+
+    public void Dispose()
+    {
+        ReplayEventService.OnNewMatchParsed -= HandleNewMatch;
+    }
+}

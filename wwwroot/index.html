@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FortniteStats</title>
+    <base href="/" />
+    <link rel="stylesheet" href="css/bootstrap/bootstrap.min.css" /> <!-- Ensuring standard flex works if needed -->
+    <link rel="stylesheet" href="css/app.css" />
+    <link href="FortniteStatsDesktop.styles.css" rel="stylesheet" />
+</head>
+<body>
+    <div id="app">Chargement du Dashboard...</div>
+
+    <script src="_framework/blazor.webview.js"></script>
+
+    <script>
+        // Captures the file path from drag & drop events on the whole document.
+        // The path is stored in window.__droppedReplayPath so Blazor can retrieve it via JSRuntime.
+        window.__droppedReplayPath = '';
+
+        document.addEventListener('dragover', function (e) {
+            e.preventDefault();
+        });
+
+        document.addEventListener('drop', function (e) {
+            e.preventDefault();
+            if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                var file = e.dataTransfer.files[0];
+                // In WebView2, file.path is available on desktop
+                window.__droppedReplayPath = file.path || file.webkitRelativePath || '';
+            }
+        });
+    </script>
+</body>
+</html>

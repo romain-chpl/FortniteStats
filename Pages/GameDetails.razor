@@ -1,0 +1,454 @@
+@page "/games/{Id}"
+@using FortniteStatsDesktop.Models
+@using FortniteStatsDesktop.Services
+@inject NavigationManager NavigationManager
+@inject MatchDataService MatchDataService
+
+<PageTitle>Détails de la Partie | Fortnite Stats</PageTitle>
+
+<div class="carbon-dashboard">
+    <!-- Back Button -->
+    <div class="mb-4">
+        <button class="carbon-btn d-flex align-items-center gap-2" @onclick="GoBack">
+            <i class="bi bi-arrow-left"></i> Retour aux parties
+        </button>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="text-center text-muted p-4">Chargement de la partie...</div>
+    }
+    else if (_match == null)
+    {
+        <div class="carbon-card text-center text-danger">
+            <h4 class="title-font">Erreur</h4>
+            <p>Impossible de trouver la partie avec l'identifiant renseigné.</p>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+            <!-- Main Column (Left) -->
+            <div class="col-12 col-lg-8">
+                <!-- Global Summary Block -->
+                <div class="carbon-card mb-4 position-relative overflow-hidden" style="background: linear-gradient(135deg, rgba(26,26,26,0.9), rgba(10,10,10,0.95)); border: 1px solid rgba(245, 158, 11, 0.2);">
+                    <!-- Decorative accent -->
+                    <div style="position: absolute; top:0; left:0; width: 4px; height: 100%; background: var(--accent-color);"></div>
+                    
+                    <div class="d-flex justify-content-between align-items-start mb-2 ms-2">
+                        <div>
+                            <!-- TOP Title -->
+                            <h1 class="title-font text-warning mb-1" style="font-weight: 900; font-size: 3rem; text-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);">
+                                TOP @(_player?.Rank ?? 0)
+                            </h1>
+                            <!-- Username Subtitle -->
+                            <h3 class="title-font text-white mb-0" style="font-weight: 700;">
+                                <span class="text-success">@_match.PovStats.Username</span>
+                            </h3>
+                            <!-- Platform Description -->
+                            <div class="text-muted small mt-1 fw-bold">
+                                <i class="bi bi-pc-display me-1"></i> Plateforme : @(_player?.Platform ?? "Inconnue")
+                            </div>
+                            <!-- Date / Heure -->
+                            @if (_match.MatchInfo.MatchDate != default)
+                            {
+                                <div class="text-muted small mt-1" style="font-size:0.78rem;">
+                                    <i class="bi bi-calendar3 me-1"></i>
+                                    @_match.MatchInfo.MatchDate.ToString("dd/MM/yyyy") &nbsp;·&nbsp;
+                                    <i class="bi bi-clock me-1"></i>
+                                    @_match.MatchInfo.MatchDate.ToString("HH:mm")
+                                </div>
+                            }
+                        </div>
+                        <!-- Kills on the right -->
+                        <div class="text-end">
+                            <div class="text-danger title-font" style="font-weight: 900; font-size: 2.5rem; line-height: 1;">
+                                @(_player?.Kills ?? 0)
+                            </div>
+                            <div class="text-muted small fw-bold text-uppercase mt-1 tracking-widest">
+                                Éliminations
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Teammates Blocks -->
+                    @if (_teammates.Any())
+                    {
+                        <hr class="border-secondary my-4" style="opacity: 0.2;"/>
+                        <h6 class="title-font text-muted mb-3 ms-2 text-uppercase" style="letter-spacing: 1px; font-size: 0.85rem;">Escouade</h6>
+                        <div class="d-flex flex-column gap-2 ms-1">
+                            @foreach (var tm in _teammates)
+                            {
+                                <div class="p-3 rounded d-flex justify-content-between align-items-center w-100" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); transition: background 0.2s;">
+                                    <div>
+                                        <div class="fw-bold fs-6 text-truncate text-warning" title="@tm.Username">
+                                            <i class="bi bi-person-fill text-warning me-1"></i> @tm.Username
+                                        </div>
+                                        <div class="text-muted mt-1" style="font-size: 0.75rem;">
+                                            Plateforme : @tm.Platform
+                                        </div>
+                                    </div>
+                                    <div class="text-danger fw-bold fs-5">
+                                        @tm.Kills <i class="bi bi-crosshair small"></i>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <!-- Top Killers Block -->
+                <div class="carbon-card top-killers-card">
+                    <div class="d-flex align-items-center justify-content-between mb-4">
+                        <h5 class="title-font text-white m-0">
+                            <i class="bi bi-crosshair text-danger me-2"></i>Top Killers
+                        </h5>
+                        <span class="badge killer-count-badge">@_topKillers.Count joueurs</span>
+                    </div>
+
+                    @if (!_topKillers.Any())
+                    {
+                        <div class="text-center text-muted py-3" style="opacity:0.5;">
+                            <i class="bi bi-slash-circle" style="font-size:2rem;"></i>
+                            <div class="mt-2 small">Aucune élimination enregistrée</div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="killer-list d-flex flex-column gap-2">
+                            @{
+                                int maxKills = _topKillers.Max(k => k.Kills);
+                                if (maxKills == 0) maxKills = 1;
+                            }
+                            @for (int i = 0; i < _topKillers.Count; i++)
+                            {
+                                var killer = _topKillers[i];
+                                var rankNum = i + 1;
+                                var pct = (int)((double)killer.Kills / maxKills * 100);
+                                var isMe = _match != null && killer.Username == _match.PovStats.Username;
+                                var isTeam = _teammates.Any(t => t.Username == killer.Username);
+                                var rowClass = isMe ? "killer-row--me" : isTeam ? "killer-row--team" : "killer-row--other";
+                                var nameColor = isMe ? "text-success" : isTeam ? "text-warning" : "text-white";
+                                var barColor = isMe ? "#10b981" : isTeam ? "#f59e0b" : (rankNum == 1 ? "#ef4444" : "#4b5563");
+                                var rankIcon = rankNum switch { 1 => "🥇", 2 => "🥈", 3 => "🥉", _ => $"#{rankNum}" };
+                                var killsColor = isMe ? "killer-kills text-success" : isTeam ? "killer-kills text-warning" : "killer-kills text-danger";
+
+                                <div class="killer-row @rowClass">
+                                    <div class="killer-rank mono-text">@rankIcon</div>
+
+                                    <div class="killer-info flex-grow-1">
+                                        <div class="d-flex align-items-center gap-2 mb-1">
+                                            <span class="fw-bold @nameColor" style="font-size:0.9rem;" title="@killer.Username">
+                                                @(killer.Username.Length > 18 ? killer.Username[..18] + "…" : killer.Username)
+                                            </span>
+                                            @if (isMe)
+                                            {
+                                                <span class="you-badge">VOUS</span>
+                                            }
+                                            else if (isTeam)
+                                            {
+                                                <span class="team-badge">ÉQUIPE</span>
+                                            }
+                                        </div>
+                                        <div class="killer-bar-track">
+                                            <div class="killer-bar" style="width:@(pct)%; background:@barColor;"></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="killer-meta text-end">
+                                        <div class="@killsColor">
+                                            @killer.Kills
+                                        </div>
+                                        <div class="killer-placement">TOP @killer.Rank</div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+            </div>
+
+            <!-- Secondary Column (Right) -->
+            <div class="col-12 col-lg-4">
+                <!-- Stats Block -->
+                <div class="carbon-card mb-4">
+                    <h5 class="title-font text-white mb-4">Statistiques</h5>
+                    
+                    <div class="d-flex align-items-center justify-content-between mb-3 pb-2" style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <div class="text-muted d-flex align-items-center gap-2">
+                            <i class="bi bi-bullseye text-warning"></i> Précision
+                        </div>
+                        <span class="text-white fw-bold">@(_match.PovStats.Accuracy.ToString("P1").Replace(" ", ""))</span>
+                    </div>
+                    
+                    <div class="d-flex align-items-center justify-content-between mb-3 pb-2" style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <div class="text-muted d-flex align-items-center gap-2">
+                            <i class="bi bi-lightning-fill text-danger"></i> Dégâts infligés
+                        </div>
+                        <span class="text-white fw-bold">@_match.PovStats.DamageDealt</span>
+                    </div>
+
+                    <div class="d-flex align-items-center justify-content-between mb-3 pb-2" style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <div class="text-muted d-flex align-items-center gap-2">
+                            <i class="bi bi-shield-fill-x text-secondary"></i> Dégâts subis
+                        </div>
+                        <span class="text-white fw-bold">@_match.PovStats.DamageTaken</span>
+                    </div>
+
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="text-muted d-flex align-items-center gap-2">
+                            <i class="bi bi-hammer text-info"></i> Mats utilisés
+                        </div>
+                        <span class="text-white fw-bold">@_match.PovStats.MaterialsUsed</span>
+                    </div>
+                </div>
+
+                <!-- Global Kill Feed Block -->
+                <div class="carbon-card d-flex flex-column" style="max-height: 600px;">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="title-font text-white m-0">Kill Feed Globale</h5>
+                        <span class="badge bg-danger bg-opacity-25 text-danger">@_match.MatchInfo.TotalElims total</span>
+                    </div>
+                    
+                    <div class="flex-grow-1 overflow-auto pe-2 kill-feed-scroll" style="margin-right: -0.5rem;">
+                        <div class="d-flex flex-column gap-2">
+                            @foreach(var kill in _match.KillFeed)
+                            {
+                                <div class="p-2 rounded" style="background: rgba(255,255,255,0.02); border-left: 2px solid @GetPlayerBorderColor(kill.Killer);">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div class="d-flex align-items-center gap-2 text-truncate" style="max-width: 80%;">
+                                            <span class="fw-bold @GetPlayerColor(kill.Killer) truncate-text" style="font-size: 0.9rem;" title="@kill.Killer">
+                                                @kill.Killer
+                                            </span>
+                                            <i class="bi bi-arrow-right text-muted small"></i>
+                                            <span class="fw-bold @GetVictimColor(kill.Victim) truncate-text" style="font-size: 0.9rem;" title="@kill.Victim">
+                                                @kill.Victim
+                                            </span>
+                                        </div>
+                                        <span class="text-muted" style="font-size: 0.75rem;">@kill.Time</span>
+                                    </div>
+                                    <div class="mt-1 text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">
+                                        @if(kill.IsKnocked) {
+                                            <span class="text-warning me-1">[K.O]</span>
+                                        }
+                                        @kill.Cause
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    /* Custom scrollbar for kill feed */
+    .kill-feed-scroll::-webkit-scrollbar {
+        width: 4px;
+    }
+    .kill-feed-scroll::-webkit-scrollbar-track {
+        background: rgba(0,0,0,0.1);
+        border-radius: 4px;
+    }
+    .kill-feed-scroll::-webkit-scrollbar-thumb {
+        background: rgba(255,255,255,0.1);
+        border-radius: 4px;
+    }
+    .kill-feed-scroll::-webkit-scrollbar-thumb:hover {
+        background: rgba(255,255,255,0.2);
+    }
+    
+    .truncate-text {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: inline-block;
+        max-width: 100px;
+    }
+
+    /* ── Top Killers ── */
+    .top-killers-card {
+        background: linear-gradient(145deg, rgba(26,26,26,0.8), rgba(15,15,15,0.9));
+    }
+
+    .killer-count-badge {
+        background: rgba(239,68,68,0.12);
+        color: #ef4444;
+        border: 1px solid rgba(239,68,68,0.2);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.72rem;
+        padding: 0.3rem 0.7rem;
+        border-radius: 20px;
+    }
+
+    .killer-row {
+        display: flex;
+        align-items: center;
+        gap: 0.9rem;
+        padding: 0.6rem 0.8rem;
+        border-radius: 8px;
+        transition: background 0.15s;
+    }
+
+    .killer-row--me {
+        background: rgba(16, 185, 129, 0.06);
+        border: 1px solid rgba(16, 185, 129, 0.15);
+    }
+
+    .killer-row--team {
+        background: rgba(245, 158, 11, 0.06);
+        border: 1px solid rgba(245, 158, 11, 0.12);
+    }
+
+    .killer-row--other {
+        background: rgba(255,255,255,0.02);
+        border: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .killer-row:hover {
+        background: rgba(255,255,255,0.05) !important;
+    }
+
+    .killer-rank {
+        font-size: 1.1rem;
+        min-width: 2rem;
+        text-align: center;
+    }
+
+    .killer-info {
+        min-width: 0;
+    }
+
+    .killer-bar-track {
+        background: rgba(255,255,255,0.06);
+        border-radius: 3px;
+        height: 5px;
+        overflow: hidden;
+    }
+
+    .killer-bar {
+        height: 100%;
+        border-radius: 3px;
+        transition: width 0.5s ease;
+    }
+
+    .killer-meta {
+        min-width: 3.5rem;
+    }
+
+    .killer-kills {
+        font-size: 1.15rem;
+        font-weight: 900;
+        font-family: 'JetBrains Mono', monospace;
+        line-height: 1;
+    }
+
+    .killer-placement {
+        font-size: 0.62rem;
+        letter-spacing: 0.5px;
+        color: var(--text-muted);
+        margin-top: 2px;
+        text-transform: uppercase;
+    }
+
+    .you-badge {
+        font-size: 0.6rem;
+        font-weight: 700;
+        letter-spacing: 1px;
+        background: rgba(16,185,129,0.15);
+        color: #10b981;
+        border: 1px solid rgba(16,185,129,0.25);
+        padding: 1px 6px;
+        border-radius: 10px;
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    .team-badge {
+        font-size: 0.6rem;
+        font-weight: 700;
+        letter-spacing: 1px;
+        background: rgba(245,158,11,0.15);
+        color: #f59e0b;
+        border: 1px solid rgba(245,158,11,0.25);
+        padding: 1px 6px;
+        border-radius: 10px;
+        font-family: 'JetBrains Mono', monospace;
+    }
+</style>
+
+
+@code {
+    [Parameter]
+    public string Id { get; set; } = "";
+
+    private ParsedMatchData? _match;
+    private LeaderboardPlayer? _player;
+    private List<LeaderboardPlayer> _teammates = new();
+    private List<LeaderboardPlayer> _topKillers = new();
+    private bool _isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _match = await MatchDataService.GetMatchByIdAsync("", Id);
+
+            if (_match != null)
+            {
+                var username = _match.PovStats.Username;
+                _player = _match.Leaderboard.FirstOrDefault(l => l.Username == username);
+
+                if (_player != null)
+                {
+                    // Find all squad mates
+                    _teammates = _match.Leaderboard
+                        .Where(l => l.TeamIndex == _player.TeamIndex && l.Username != username)
+                        .ToList();
+                }
+
+                // Get top 10 killers
+                _topKillers = _match.Leaderboard
+                    .Where(l => l.Kills > 0)
+                    .OrderByDescending(l => l.Kills)
+                    .Take(10)
+                    .ToList();
+            }
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private string GetPlayerColor(string username)
+    {
+        if (_match == null) return "text-white";
+        if (username == _match.PovStats.Username) return "text-success";
+        if (_teammates.Any(t => t.Username == username)) return "text-warning";
+        return "text-white";
+    }
+
+    private string GetVictimColor(string username)
+    {
+        if (_match == null) return "text-muted";
+        if (username == _match.PovStats.Username) return "text-success";
+        if (_teammates.Any(t => t.Username == username)) return "text-warning";
+        return "text-muted";
+    }
+
+    private string GetPlayerBorderColor(string username)
+    {
+        if (_match == null) return "rgba(255,255,255,0.1)";
+        if (username == _match.PovStats.Username) return "var(--success)";
+        if (_teammates.Any(t => t.Username == username)) return "var(--accent-color)";
+        return "rgba(255,255,255,0.1)";
+    }
+
+    private void GoBack()
+    {
+        NavigationManager.NavigateTo("/games");
+    }
+}

@@ -1,0 +1,391 @@
+@page "/"
+@using FortniteStatsDesktop.Models
+@inject FortniteStatsDesktop.Services.ReplayWatcherService Watcher
+@inject FortniteStatsDesktop.Services.MatchDataService MatchDataService
+@inject FortniteStatsDesktop.Services.ReplayEventService ReplayEventService
+@inject FortniteStatsDesktop.Services.SettingsService SettingsService
+@implements IDisposable
+
+<PageTitle>Accueil - Dashboard</PageTitle>
+
+<div class="carbon-dashboard">
+    <div class="carbon-header">
+        <h1 class="title-font gradient-text">Système d'Analyse</h1>
+        <p class="subtitle mt-3 text-muted">Monitoring des matchs et analytiques avancées</p>
+    </div>
+
+    <div class="status-grid mt-5">
+        <div class="carbon-card status-card @(Watcher.IsWatching ? "glow-active" : "") d-flex justify-content-between align-items-center">
+            <div>
+                <h4 class="mb-1 text-muted mono-text text-uppercase" style="font-size:0.85rem; letter-spacing:1px;">Module Tracker</h4>
+                @if (Watcher.IsWatching)
+                {
+                    <h2 class="text-success mb-0">Actif</h2>
+                }
+                else
+                {
+                    <h2 class="text-warning mb-0">En attente</h2>
+                }
+            </div>
+            <div class="status-icon @(Watcher.IsWatching ? "pulse-success" : "pulse-warning")">
+                @if (Watcher.IsWatching)
+                {
+                    <i class="bi bi-broadcast text-success" style="font-size: 2.5rem;"></i>
+                }
+                else
+                {
+                    <i class="bi bi-clock-history text-warning" style="font-size: 2.5rem;"></i>
+                }
+            </div>
+        </div>
+
+        <div class="carbon-card info-card">
+            <h4 class="mb-3 text-muted mono-text text-uppercase" style="font-size:0.85rem; letter-spacing:1px;">Dernière activité</h4>
+            <p class="mb-0" style="color: var(--text-main); font-weight: 500;">
+                @if (string.IsNullOrEmpty(ReplayEventService.CurrentReplayName))
+                {
+                    <span class="opacity-50">Aucun replay détecté. L'analyseur écoute en arrière-plan.</span>
+                }
+                else
+                {
+                    <span class="text-white">@ReplayEventService.CurrentReplayName</span>
+                }
+            </p>
+        </div>
+    </div>
+
+    @* Zone centrale : état du système + drag & drop *@
+    <div class="carbon-card radar-view mt-4 d-flex flex-column align-items-center justify-content-center p-5
+                @(_isDragOver ? "drag-over" : "")"
+         ondragover="event.preventDefault();"
+         @ondragover:preventDefault="true"
+         @ondrop="HandleDrop"
+         @ondragenter="() => _isDragOver = true"
+         @ondragleave="() => _isDragOver = false">
+
+        @if (ReplayEventService.IsParsing)
+        {
+            <div class="spinner-border text-warning mb-4" role="status" style="width: 3rem; height: 3rem;"></div>
+            <h3 class="text-warning title-font m-0" style="opacity: 0.9; letter-spacing: 2px;">ANALYSE EN COURS...</h3>
+            <p class="text-muted mono-text mt-2" style="font-size: 0.85em; opacity: 0.6;">Fichier détecté : @ReplayEventService.CurrentReplayName</p>
+        }
+        else if (_previewParsing)
+        {
+            <div class="spinner-border text-info mb-4" role="status" style="width: 3rem; height: 3rem;"></div>
+            <h3 class="text-info title-font m-0" style="opacity: 0.9; letter-spacing: 2px;">PREVIEW EN COURS...</h3>
+            <p class="text-muted mono-text mt-2" style="font-size: 0.85em; opacity: 0.6;">@_previewFileName</p>
+        }
+        else if (_previewMatch != null)
+        {
+            @* Résultat d'une preview drag & drop (non sauvegardé) *@
+            <div class="preview-result text-center w-100">
+                <div class="d-flex align-items-center justify-content-center gap-2 mb-3">
+                    <i class="bi bi-eye text-info" style="font-size:1.5rem;"></i>
+                    <span class="text-info mono-text" style="font-size:0.78rem; letter-spacing:1px; text-transform:uppercase;">Aperçu (non sauvegardé)</span>
+                </div>
+                <div class="preview-stats d-flex gap-4 justify-content-center flex-wrap mb-3">
+                    <div class="preview-stat">
+                        <div class="preview-stat-value text-warning">
+                            TOP @(_previewMatch.Leaderboard.FirstOrDefault(l => l.Username == _previewMatch.PovStats.Username)?.Rank ?? 0)
+                        </div>
+                        <div class="preview-stat-label">Placement</div>
+                    </div>
+                    <div class="preview-stat">
+                        <div class="preview-stat-value text-danger">
+                            @(_previewMatch.Leaderboard.FirstOrDefault(l => l.Username == _previewMatch.PovStats.Username)?.Kills ?? 0)
+                        </div>
+                        <div class="preview-stat-label">Kills</div>
+                    </div>
+                    <div class="preview-stat">
+                        <div class="preview-stat-value text-white">@_previewMatch.PovStats.DamageDealt</div>
+                        <div class="preview-stat-label">Dégâts</div>
+                    </div>
+                    <div class="preview-stat">
+                        <div class="preview-stat-value text-info">@_previewMatch.PovStats.Accuracy.ToString("P1").Replace(" ", "")</div>
+                        <div class="preview-stat-label">Précision</div>
+                    </div>
+                </div>
+                <div class="text-muted mono-text mb-3" style="font-size:0.78rem;">
+                    <i class="bi bi-person me-1"></i> @_previewMatch.PovStats.Username
+                    &nbsp;·&nbsp;
+                    <i class="bi bi-file-earmark me-1"></i> @_previewFileName
+                </div>
+                <button class="carbon-btn" style="font-size:0.8rem; padding:0.5rem 1rem;" @onclick="ClearPreview">
+                    <i class="bi bi-x me-1"></i> Fermer l'aperçu
+                </button>
+            </div>
+        }
+        else if (_previewError)
+        {
+            <i class="bi bi-exclamation-triangle text-danger mb-3" style="font-size:2.5rem; opacity:0.7;"></i>
+            <h3 class="text-danger title-font m-0" style="font-size:1.1rem;">Impossible de parser ce replay</h3>
+            <p class="text-muted mono-text mt-2" style="font-size:0.82em;">@_previewFileName</p>
+            <button class="carbon-btn mt-3" style="font-size:0.8rem; padding:0.5rem 1rem;" @onclick="ClearPreview">Réessayer</button>
+        }
+        else if (Watcher.IsWatching)
+        {
+            <i class="bi bi-check-circle text-success mb-3" style="font-size: 3rem; opacity: 0.5;"></i>
+            <h3 class="text-muted title-font m-0" style="opacity: 0.8; letter-spacing: 2px;">PRÊT ET EN ATTENTE</h3>
+            <p class="text-muted mono-text mt-2" style="font-size: 0.85em; opacity: 0.6;">Surveillance : @Watcher.CurrentPath</p>
+
+            @* Zone drag & drop hint *@
+            <div class="drop-hint mt-4">
+                <i class="bi bi-cloud-arrow-up me-2" style="opacity:0.5;"></i>
+                <span style="opacity:0.45;">Déposez un fichier .replay ici pour un aperçu rapide</span>
+            </div>
+        }
+        else
+        {
+            <button class="carbon-btn primary-btn mt-2" @onclick="StartWatching">
+                Initialiser le Service
+            </button>
+            <p class="text-muted mono-text mt-3" style="font-size: 0.85em; opacity: 0.6;">Système en attente d'initialisation</p>
+
+            @* Zone drag & drop hint *@
+            <div class="drop-hint mt-4">
+                <i class="bi bi-cloud-arrow-up me-2" style="opacity:0.5;"></i>
+                <span style="opacity:0.45;">Déposez un fichier .replay ici pour un aperçu rapide</span>
+            </div>
+        }
+
+        @* Overlay visible lors du drag *@
+        @if (_isDragOver)
+        {
+            <div class="drop-overlay">
+                <i class="bi bi-file-earmark-play" style="font-size:3rem;"></i>
+                <div class="mt-2 title-font" style="letter-spacing:2px;">DÉPOSER LE REPLAY</div>
+            </div>
+        }
+    </div>
+
+    @* Stats globales *@
+    <div class="row g-3 mt-1">
+        <div class="col-4">
+            <div class="carbon-card text-center py-4">
+                <div class="text-warning fw-bold" style="font-size: 2rem; line-height:1;">@_totalGames</div>
+                <div class="text-muted small mt-1 mono-text text-uppercase" style="letter-spacing:1px; font-size:0.72rem;">Parties parsées</div>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="carbon-card text-center py-4">
+                <div class="text-danger fw-bold" style="font-size: 2rem; line-height:1;">@_totalKills</div>
+                <div class="text-muted small mt-1 mono-text text-uppercase" style="letter-spacing:1px; font-size:0.72rem;">Total Kills</div>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="carbon-card text-center py-4">
+                <div class="text-info fw-bold" style="font-size: 2rem; line-height:1;">@_avgAccuracy</div>
+                <div class="text-muted small mt-1 mono-text text-uppercase" style="letter-spacing:1px; font-size:0.72rem;">Précision Moyenne</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Drag & drop */
+    .radar-view {
+        position: relative;
+        transition: border-color 0.2s, background 0.2s;
+    }
+
+    .radar-view.drag-over {
+        border-color: rgba(99, 179, 237, 0.6) !important;
+        background: rgba(99, 179, 237, 0.06) !important;
+    }
+
+    .drop-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(10, 10, 10, 0.85);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #63b3ed;
+        border-radius: 10px;
+        backdrop-filter: blur(4px);
+        z-index: 10;
+        pointer-events: none;
+        animation: fadeIn 0.15s ease;
+    }
+
+    .drop-hint {
+        font-size: 0.78rem;
+        font-family: 'JetBrains Mono', monospace;
+        color: var(--text-muted);
+        border: 1px dashed rgba(255,255,255,0.1);
+        border-radius: 8px;
+        padding: 0.6rem 1.2rem;
+    }
+
+    /* Badge "partie en cours" */
+    .ongoing-badge {
+        background: rgba(99, 179, 237, 0.12);
+        color: #63b3ed;
+        border: 1px solid rgba(99, 179, 237, 0.25);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 0.4rem 0.9rem;
+        border-radius: 20px;
+        letter-spacing: 0.5px;
+    }
+
+    /* Preview stats */
+    .preview-result {
+        animation: fadeIn 0.3s ease;
+    }
+
+    .preview-stat {
+        text-align: center;
+    }
+
+    .preview-stat-value {
+        font-size: 1.8rem;
+        font-weight: 900;
+        font-family: 'JetBrains Mono', monospace;
+        line-height: 1;
+    }
+
+    .preview-stat-label {
+        font-size: 0.68rem;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        margin-top: 0.3rem;
+    }
+</style>
+
+@code {
+    private int _totalGames = 0;
+    private int _totalKills = 0;
+    private string _avgAccuracy = "—";
+
+    // Drag & drop preview
+    private bool _isDragOver = false;
+    private bool _previewParsing = false;
+    private bool _previewError = false;
+    private string? _previewFileName;
+    private ParsedMatchData? _previewMatch;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ReplayEventService.OnNewMatchParsed += HandleNewMatch;
+        await LoadStats();
+    }
+
+    private async Task HandleNewMatch(ParsedMatchData match)
+    {
+        await LoadStats();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadStats()
+    {
+        var matches = await MatchDataService.GetAllMatchesAsync();
+        var valid = matches.Where(m => IsValid(m)).ToList();
+        _totalGames = valid.Count;
+        _totalKills = valid.Sum(m => GetKills(m));
+        var accuracies = valid.Where(m => m.PovStats.Accuracy > 0).Select(m => m.PovStats.Accuracy).ToList();
+        _avgAccuracy = accuracies.Any() ? accuracies.Average().ToString("P1").Replace(" ", "") : "—";
+    }
+
+    private bool IsValid(ParsedMatchData m) =>
+        !string.IsNullOrWhiteSpace(m.PovStats.Username) &&
+        m.Leaderboard.Any(l => l.Username == m.PovStats.Username) &&
+        GetPlacement(m) > 0;
+
+    private int GetPlacement(ParsedMatchData m)
+    {
+        var p = m.Leaderboard.FirstOrDefault(l => l.Username == m.PovStats.Username);
+        return p?.Rank ?? 0;
+    }
+
+    private int GetKills(ParsedMatchData m)
+    {
+        var p = m.Leaderboard.FirstOrDefault(l => l.Username == m.PovStats.Username);
+        return p?.Kills ?? 0;
+    }
+
+    private void StartWatching()
+    {
+        ReplayEventService.RestartWatcher();
+        StateHasChanged();
+    }
+
+    // ── Drag & Drop ──────────────────────────────────────────────────────────
+
+    private async Task HandleDrop(Microsoft.AspNetCore.Components.Web.DragEventArgs e)
+    {
+        _isDragOver = false;
+
+        // Dans WebView2 les fichiers droppés passent par DataTransfer.Files mais ne sont pas
+        // forcément accessibles directement. On tente via JS interop via un attribut custom
+        // injecté dans l'événement. La solution la plus robuste : on lit le chemin depuis
+        // l'attribut DataTransfer / effectivement glissé via e.DataTransfer.Files.
+        // Blazor Hybrid / WebView2 ne supporte pas Files directement, on utilise une approche
+        // via window.draggedFilePath injecté par interop JS au niveau du MainWindow.
+
+        // Le chemin est transmis via un champ JS global défini dans index.html
+        var path = await GetDroppedFilePath();
+        if (string.IsNullOrEmpty(path) || !path.EndsWith(".replay", StringComparison.OrdinalIgnoreCase))
+        {
+            _previewError = true;
+            _previewFileName = path ?? "(chemin inconnu)";
+            StateHasChanged();
+            return;
+        }
+
+        await RunPreviewAsync(path);
+    }
+
+    private async Task<string?> GetDroppedFilePath()
+    {
+        try
+        {
+            // On lit la variable JS window.__droppedReplayPath qui est alimentée par l'event
+            // handler natif injecté dans index.html
+            var result = await JSRuntime.InvokeAsync<string?>("eval", "window.__droppedReplayPath || ''");
+            return string.IsNullOrEmpty(result) ? null : result;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task RunPreviewAsync(string fullPath)
+    {
+        _previewParsing = true;
+        _previewMatch = null;
+        _previewError = false;
+        _previewFileName = System.IO.Path.GetFileName(fullPath);
+        StateHasChanged();
+
+        var result = await ReplayEventService.ParseReplayPreviewAsync(fullPath);
+
+        _previewParsing = false;
+        if (result != null)
+        {
+            _previewMatch = result;
+        }
+        else
+        {
+            _previewError = true;
+        }
+        StateHasChanged();
+    }
+
+    private void ClearPreview()
+    {
+        _previewMatch = null;
+        _previewError = false;
+        _previewFileName = null;
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        ReplayEventService.OnNewMatchParsed -= HandleNewMatch;
+    }
+}

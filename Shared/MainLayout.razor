@@ -1,0 +1,193 @@
+@inherits LayoutComponentBase
+@using FortniteStatsDesktop.Models
+@inject FortniteStatsDesktop.Services.ReplayEventService ReplayEventService
+@inject FortniteStatsDesktop.Services.SettingsService SettingsService
+@inject NavigationManager NavManager
+@implements IDisposable
+
+<div class="app-container">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main class="main-content">
+        <article class="content p-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+@* Overlay de notification nouvelle partie *@
+@if (_showOverlay)
+{
+    <div class="new-match-overlay">
+        <div class="new-match-card @(_cardBorderClass)">
+
+            @* État : PARSING EN COURS *@
+            @if (_isParsing)
+            {
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <div class="spinner-border spinner-border-sm text-warning" role="status"></div>
+                    <span class="text-warning fw-bold mono-text text-uppercase" style="letter-spacing:2px; font-size:0.78rem;">
+                        Analyse en cours...
+                    </span>
+                </div>
+                <div class="text-muted small mono-text text-truncate">@_currentReplayName</div>
+            }
+
+            @* État : TERMINÉ *@
+            else if (_newMatch != null)
+            {
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <i class="bi bi-check-circle-fill text-success" style="font-size:1.1rem;"></i>
+                    <span class="text-success fw-bold mono-text text-uppercase" style="letter-spacing:2px; font-size:0.78rem;">
+                        Partie analysée
+                    </span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <div class="text-white fw-bold fs-6">@_newMatch.PovStats.Username</div>
+                        @if (_newMatch.MatchInfo.MatchDate != default)
+                        {
+                            <div class="text-muted" style="font-size:0.75rem;">@_newMatch.MatchInfo.MatchDate.ToString("dd/MM HH:mm")</div>
+                        }
+                    </div>
+                    <div class="text-end">
+                        <div class="fw-bold @(_placement == 1 ? "text-warning" : "text-white")" style="font-size:1.4rem; line-height:1;">
+                            TOP @_placement
+                        </div>
+                        <div class="text-muted" style="font-size:0.75rem;">@_kills kills</div>
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn primary-btn flex-grow-1" style="font-size:0.8rem;" @onclick="GoToMatch">
+                        <i class="bi bi-eye me-1"></i>Voir les détails
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="DismissOverlay" title="Fermer">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+<style>
+    .new-match-overlay {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        z-index: 9999;
+        animation: slideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .new-match-card {
+        background: rgba(18, 18, 18, 0.97);
+        border-radius: 12px;
+        padding: 1.1rem 1.3rem;
+        min-width: 290px;
+        max-width: 320px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.04);
+        backdrop-filter: blur(24px);
+        transition: border-color 0.4s ease;
+    }
+
+    .new-match-card.border-parsing {
+        border: 1px solid rgba(245, 158, 11, 0.5);
+        box-shadow: 0 0 24px rgba(245,158,11,0.08), 0 20px 60px rgba(0,0,0,0.7);
+    }
+
+    .new-match-card.border-done {
+        border: 1px solid rgba(16, 185, 129, 0.5);
+        box-shadow: 0 0 24px rgba(16,185,129,0.1), 0 20px 60px rgba(0,0,0,0.7);
+    }
+
+    @@keyframes slideInRight {
+        from { opacity: 0; transform: translateX(40px) scale(0.95); }
+        to   { opacity: 1; transform: translateX(0) scale(1); }
+    }
+</style>
+
+@code {
+    private bool _showOverlay = false;
+    private bool _isParsing = false;
+    private string _currentReplayName = "";
+    private ParsedMatchData? _newMatch;
+    private string _cardBorderClass = "border-parsing";
+    private int _placement = 0;
+    private int _kills = 0;
+
+    protected override void OnInitialized()
+    {
+        ReplayEventService.OnParsingStarted += HandleParsingStarted;
+        ReplayEventService.OnNewMatchParsed += HandleNewMatch;
+    }
+
+    private async Task HandleParsingStarted(string replayName)
+    {
+        _isParsing = true;
+        _newMatch = null;
+        _currentReplayName = replayName;
+        _cardBorderClass = "border-parsing";
+        _showOverlay = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleNewMatch(ParsedMatchData match)
+    {
+        _isParsing = false;
+        _newMatch = match;
+        _cardBorderClass = "border-done";
+
+        _placement = match.Leaderboard
+            .FirstOrDefault(l => l.Username == match.PovStats.Username)?.Rank ?? 0;
+        _kills = match.Leaderboard
+            .FirstOrDefault(l => l.Username == match.PovStats.Username)?.Kills ?? 0;
+
+        await InvokeAsync(StateHasChanged);
+
+        if (SettingsService.CurrentSettings.AutoShowLatestGame)
+        {
+            // Délai court puis navigation
+            await Task.Delay(800);
+            string encodedId = Uri.EscapeDataString(match.PovStats.Id);
+            await InvokeAsync(() => NavManager.NavigateTo($"/games/{encodedId}"));
+            // Fermer l'overlay après navigation
+            await Task.Delay(500);
+            DismissOverlay();
+        }
+        else
+        {
+            // Attendre 15 secondes puis fermer automatiquement
+            await Task.Delay(15_000);
+            // Vérifier qu'une nouvelle partie n'a pas été détectée entre-temps
+            if (_newMatch == match)
+            {
+                DismissOverlay();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private void GoToMatch()
+    {
+        if (_newMatch == null) return;
+        string encodedId = Uri.EscapeDataString(_newMatch.PovStats.Id);
+        DismissOverlay();
+        NavManager.NavigateTo($"/games/{encodedId}");
+    }
+
+    private void DismissOverlay()
+    {
+        _showOverlay = false;
+        _newMatch = null;
+        _isParsing = false;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        ReplayEventService.OnParsingStarted -= HandleParsingStarted;
+        ReplayEventService.OnNewMatchParsed -= HandleNewMatch;
+    }
+}
