@@ -11,7 +11,7 @@
         AllowsTransparency="False"
         ResizeMode="CanResize">
     
-    <Grid>
+    <Grid AllowDrop="True" Drop="Grid_Drop" DragOver="Grid_DragOver">
         <blazor:BlazorWebView x:Name="blazorWebView" 
                              HostPage="wwwroot/index.html" 
                              Services="{DynamicResource services}">

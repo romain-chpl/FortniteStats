@@ -3,6 +3,7 @@
 @using FortniteStatsDesktop.Services
 @inject NavigationManager NavigationManager
 @inject MatchDataService MatchDataService
+@inject MatchStateService MatchStateService
 
 <PageTitle>Détails de la Partie | Fortnite Stats</PageTitle>
 
@@ -10,7 +11,7 @@
     <!-- Back Button -->
     <div class="mb-4">
         <button class="carbon-btn d-flex align-items-center gap-2" @onclick="GoBack">
-            <i class="bi bi-arrow-left"></i> Retour aux parties
+            <i class="bi bi-arrow-left"></i> Retour
         </button>
     </div>
 
@@ -179,28 +180,28 @@
                         <div class="text-muted d-flex align-items-center gap-2">
                             <i class="bi bi-bullseye text-warning"></i> Précision
                         </div>
-                        <span class="text-white fw-bold">@(_match.PovStats.Accuracy.ToString("P1").Replace(" ", ""))</span>
+                        <span class="text-white fw-bold">@(_match?.PovStats.Accuracy.ToString("P1").Replace(" ", ""))</span>
                     </div>
                     
                     <div class="d-flex align-items-center justify-content-between mb-3 pb-2" style="border-bottom: 1px solid rgba(255,255,255,0.05);">
                         <div class="text-muted d-flex align-items-center gap-2">
                             <i class="bi bi-lightning-fill text-danger"></i> Dégâts infligés
                         </div>
-                        <span class="text-white fw-bold">@_match.PovStats.DamageDealt</span>
+                        <span class="text-white fw-bold">@_match?.PovStats.DamageDealt</span>
                     </div>
 
                     <div class="d-flex align-items-center justify-content-between mb-3 pb-2" style="border-bottom: 1px solid rgba(255,255,255,0.05);">
                         <div class="text-muted d-flex align-items-center gap-2">
                             <i class="bi bi-shield-fill-x text-secondary"></i> Dégâts subis
                         </div>
-                        <span class="text-white fw-bold">@_match.PovStats.DamageTaken</span>
+                        <span class="text-white fw-bold">@_match?.PovStats.DamageTaken</span>
                     </div>
 
                     <div class="d-flex align-items-center justify-content-between">
                         <div class="text-muted d-flex align-items-center gap-2">
                             <i class="bi bi-hammer text-info"></i> Mats utilisés
                         </div>
-                        <span class="text-white fw-bold">@_match.PovStats.MaterialsUsed</span>
+                        <span class="text-white fw-bold">@_match?.PovStats.MaterialsUsed</span>
                     </div>
                 </div>
 
@@ -208,12 +209,12 @@
                 <div class="carbon-card d-flex flex-column" style="max-height: 600px;">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h5 class="title-font text-white m-0">Kill Feed Globale</h5>
-                        <span class="badge bg-danger bg-opacity-25 text-danger">@_match.MatchInfo.TotalElims total</span>
+                        <span class="badge bg-danger bg-opacity-25 text-danger">@(_match?.MatchInfo.TotalElims ?? 0) total</span>
                     </div>
                     
                     <div class="flex-grow-1 overflow-auto pe-2 kill-feed-scroll" style="margin-right: -0.5rem;">
                         <div class="d-flex flex-column gap-2">
-                            @foreach(var kill in _match.KillFeed)
+                            @foreach(var kill in _match?.KillFeed ?? new())
                             {
                                 <div class="p-2 rounded" style="background: rgba(255,255,255,0.02); border-left: 2px solid @GetPlayerBorderColor(kill.Killer);">
                                     <div class="d-flex justify-content-between align-items-start">
@@ -394,7 +395,14 @@
     {
         try
         {
-            _match = await MatchDataService.GetMatchByIdAsync("", Id);
+            if (Id == "preview")
+            {
+                _match = MatchStateService.CurrentMatch;
+            }
+            else
+            {
+                _match = await MatchDataService.GetMatchByIdAsync("", Id);
+            }
 
             if (_match != null)
             {
@@ -449,6 +457,13 @@
 
     private void GoBack()
     {
-        NavigationManager.NavigateTo("/games");
+        if (Id == "preview")
+        {
+            NavigationManager.NavigateTo("/");
+        }
+        else
+        {
+            NavigationManager.NavigateTo("/games");
+        }
     }
 }

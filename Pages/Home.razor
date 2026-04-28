@@ -4,6 +4,9 @@
 @inject FortniteStatsDesktop.Services.MatchDataService MatchDataService
 @inject FortniteStatsDesktop.Services.ReplayEventService ReplayEventService
 @inject FortniteStatsDesktop.Services.SettingsService SettingsService
+@inject FortniteStatsDesktop.Services.DragDropService DragDropService
+@inject FortniteStatsDesktop.Services.MatchStateService MatchStateService
+@inject NavigationManager NavigationManager
 @implements IDisposable
 
 <PageTitle>Accueil - Dashboard</PageTitle>
@@ -75,46 +78,6 @@
             <h3 class="text-info title-font m-0" style="opacity: 0.9; letter-spacing: 2px;">PREVIEW EN COURS...</h3>
             <p class="text-muted mono-text mt-2" style="font-size: 0.85em; opacity: 0.6;">@_previewFileName</p>
         }
-        else if (_previewMatch != null)
-        {
-            @* Résultat d'une preview drag & drop (non sauvegardé) *@
-            <div class="preview-result text-center w-100">
-                <div class="d-flex align-items-center justify-content-center gap-2 mb-3">
-                    <i class="bi bi-eye text-info" style="font-size:1.5rem;"></i>
-                    <span class="text-info mono-text" style="font-size:0.78rem; letter-spacing:1px; text-transform:uppercase;">Aperçu (non sauvegardé)</span>
-                </div>
-                <div class="preview-stats d-flex gap-4 justify-content-center flex-wrap mb-3">
-                    <div class="preview-stat">
-                        <div class="preview-stat-value text-warning">
-                            TOP @(_previewMatch.Leaderboard.FirstOrDefault(l => l.Username == _previewMatch.PovStats.Username)?.Rank ?? 0)
-                        </div>
-                        <div class="preview-stat-label">Placement</div>
-                    </div>
-                    <div class="preview-stat">
-                        <div class="preview-stat-value text-danger">
-                            @(_previewMatch.Leaderboard.FirstOrDefault(l => l.Username == _previewMatch.PovStats.Username)?.Kills ?? 0)
-                        </div>
-                        <div class="preview-stat-label">Kills</div>
-                    </div>
-                    <div class="preview-stat">
-                        <div class="preview-stat-value text-white">@_previewMatch.PovStats.DamageDealt</div>
-                        <div class="preview-stat-label">Dégâts</div>
-                    </div>
-                    <div class="preview-stat">
-                        <div class="preview-stat-value text-info">@_previewMatch.PovStats.Accuracy.ToString("P1").Replace(" ", "")</div>
-                        <div class="preview-stat-label">Précision</div>
-                    </div>
-                </div>
-                <div class="text-muted mono-text mb-3" style="font-size:0.78rem;">
-                    <i class="bi bi-person me-1"></i> @_previewMatch.PovStats.Username
-                    &nbsp;·&nbsp;
-                    <i class="bi bi-file-earmark me-1"></i> @_previewFileName
-                </div>
-                <button class="carbon-btn" style="font-size:0.8rem; padding:0.5rem 1rem;" @onclick="ClearPreview">
-                    <i class="bi bi-x me-1"></i> Fermer l'aperçu
-                </button>
-            </div>
-        }
         else if (_previewError)
         {
             <i class="bi bi-exclamation-triangle text-danger mb-3" style="font-size:2.5rem; opacity:0.7;"></i>
@@ -136,10 +99,19 @@
         }
         else
         {
-            <button class="carbon-btn primary-btn mt-2" @onclick="StartWatching">
-                Initialiser le Service
-            </button>
-            <p class="text-muted mono-text mt-3" style="font-size: 0.85em; opacity: 0.6;">Système en attente d'initialisation</p>
+            if (!SettingsService.CurrentSettings.AutoParseEnabled)
+            {
+                <i class="bi bi-pause-circle text-muted mb-3" style="font-size: 3rem; opacity: 0.3;"></i>
+                <h3 class="text-muted title-font m-0" style="opacity: 0.8; letter-spacing: 2px;">ANALYSE DÉSACTIVÉE</h3>
+                <p class="text-muted mono-text mt-2" style="font-size: 0.85em; opacity: 0.6;">Activez l'analyse automatique dans les paramètres pour tracker vos parties.</p>
+            }
+            else
+            {
+                <button class="carbon-btn primary-btn mt-2" @onclick="StartWatching">
+                    Initialiser le Service
+                </button>
+                <p class="text-muted mono-text mt-3" style="font-size: 0.85em; opacity: 0.6;">Système en attente d'initialisation</p>
+            }
 
             @* Zone drag & drop hint *@
             <div class="drop-hint mt-4">
@@ -266,11 +238,11 @@
     private bool _previewParsing = false;
     private bool _previewError = false;
     private string? _previewFileName;
-    private ParsedMatchData? _previewMatch;
 
     protected override async Task OnInitializedAsync()
     {
         ReplayEventService.OnNewMatchParsed += HandleNewMatch;
+        DragDropService.OnFileDropped += HandleNativeFileDrop;
         await LoadStats();
     }
 
@@ -278,6 +250,20 @@
     {
         await LoadStats();
         await InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleNativeFileDrop(string filePath)
+    {
+        if (string.IsNullOrEmpty(filePath) || !filePath.EndsWith(".replay", StringComparison.OrdinalIgnoreCase))
+        {
+            _previewError = true;
+            _previewFileName = Path.GetFileName(filePath) ?? "(fichier inconnu)";
+            InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        // On lance le parsing en preview
+        _ = InvokeAsync(() => RunPreviewAsync(filePath));
     }
 
     private async Task LoadStats()
@@ -315,49 +301,15 @@
 
     // ── Drag & Drop ──────────────────────────────────────────────────────────
 
-    private async Task HandleDrop(Microsoft.AspNetCore.Components.Web.DragEventArgs e)
+    private void HandleDrop(Microsoft.AspNetCore.Components.Web.DragEventArgs e)
     {
         _isDragOver = false;
-
-        // Dans WebView2 les fichiers droppés passent par DataTransfer.Files mais ne sont pas
-        // forcément accessibles directement. On tente via JS interop via un attribut custom
-        // injecté dans l'événement. La solution la plus robuste : on lit le chemin depuis
-        // l'attribut DataTransfer / effectivement glissé via e.DataTransfer.Files.
-        // Blazor Hybrid / WebView2 ne supporte pas Files directement, on utilise une approche
-        // via window.draggedFilePath injecté par interop JS au niveau du MainWindow.
-
-        // Le chemin est transmis via un champ JS global défini dans index.html
-        var path = await GetDroppedFilePath();
-        if (string.IsNullOrEmpty(path) || !path.EndsWith(".replay", StringComparison.OrdinalIgnoreCase))
-        {
-            _previewError = true;
-            _previewFileName = path ?? "(chemin inconnu)";
-            StateHasChanged();
-            return;
-        }
-
-        await RunPreviewAsync(path);
-    }
-
-    private async Task<string?> GetDroppedFilePath()
-    {
-        try
-        {
-            // On lit la variable JS window.__droppedReplayPath qui est alimentée par l'event
-            // handler natif injecté dans index.html
-            var result = await JSRuntime.InvokeAsync<string?>("eval", "window.__droppedReplayPath || ''");
-            return string.IsNullOrEmpty(result) ? null : result;
-        }
-        catch
-        {
-            return null;
-        }
+        // On ne fait rien ici car l'événement est déjà capturé par WPF nativement
     }
 
     private async Task RunPreviewAsync(string fullPath)
     {
         _previewParsing = true;
-        _previewMatch = null;
         _previewError = false;
         _previewFileName = System.IO.Path.GetFileName(fullPath);
         StateHasChanged();
@@ -367,18 +319,19 @@
         _previewParsing = false;
         if (result != null)
         {
-            _previewMatch = result;
+            // On stocke le match dans le service et on navigue vers la page de détails
+            MatchStateService.SetMatch(result, isPreview: true);
+            NavigationManager.NavigateTo("/games/preview");
         }
         else
         {
             _previewError = true;
+            StateHasChanged();
         }
-        StateHasChanged();
     }
 
     private void ClearPreview()
     {
-        _previewMatch = null;
         _previewError = false;
         _previewFileName = null;
         StateHasChanged();
@@ -387,5 +340,6 @@
     public void Dispose()
     {
         ReplayEventService.OnNewMatchParsed -= HandleNewMatch;
+        DragDropService.OnFileDropped -= HandleNativeFileDrop;
     }
 }

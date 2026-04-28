@@ -46,6 +46,16 @@
     <div class="carbon-card">
         <h5 class="title-font text-white mb-4"><i class="bi bi-sliders text-info me-2"></i> Comportement</h5>
 
+        <div class="d-flex align-items-center justify-content-between p-3 rounded mb-3" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05);">
+            <div>
+                <div class="fw-bold text-white mb-1">Analyse Automatique</div>
+                <div class="text-muted small">Surveiller le dossier des replays et analyser les nouveaux fichiers dès qu'ils apparaissent.</div>
+            </div>
+            <div class="form-check form-switch fs-4">
+                <input class="form-check-input" type="checkbox" role="switch" id="autoParseSwitch" @bind="SettingsService.CurrentSettings.AutoParseEnabled" @bind:after="SaveSettings">
+            </div>
+        </div>
+
         <div class="d-flex align-items-center justify-content-between p-3 rounded" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05);">
             <div>
                 <div class="fw-bold text-white mb-1">Affichage Automatique</div>

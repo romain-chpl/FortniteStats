@@ -55,6 +55,13 @@ namespace FortniteStatsDesktop.Services
         private void InitializeWatcher()
         {
             if (_watcher.IsWatching) return;
+            
+            // On ne démarre le watcher que si l'option est activée dans les paramètres
+            if (!_settingsService.CurrentSettings.AutoParseEnabled)
+            {
+                Console.WriteLine("[ReplayEventService] ⏭️ Analyse automatique désactivée dans les paramètres.");
+                return;
+            }
 
             try
             {
@@ -89,6 +96,13 @@ namespace FortniteStatsDesktop.Services
         /// </summary>
         private async Task HandleReplayDetected(string fullPath, bool isLatest, bool isOngoing)
         {
+            // Vérification de sécurité : l'option doit être activée
+            if (!_settingsService.CurrentSettings.AutoParseEnabled)
+            {
+                _watcher.StopWatching();
+                return;
+            }
+
             // Éviter les analyses parallèles (sécurité)
             if (IsParsing) return;
 

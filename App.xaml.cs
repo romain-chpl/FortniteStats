@@ -17,6 +17,8 @@ namespace FortniteStatsDesktop
             serviceCollection.AddSingleton<MatchDataService>();
             serviceCollection.AddSingleton<SettingsService>();
             serviceCollection.AddSingleton<ReplayEventService>();
+            serviceCollection.AddSingleton<DragDropService>();
+            serviceCollection.AddSingleton<MatchStateService>();
 
             Resources.Add("services", serviceCollection.BuildServiceProvider());
         }
