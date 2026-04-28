@@ -58,7 +58,7 @@ Elle permet aux joueurs de suivre leurs performances, d'analyser leurs statistiq
 L'application analyse des fichiers locaux uniquement et n'envoie aucune donnée personnelle vers des serveurs externes.
 
 **Analyse VirusTotal (Build de référence) :**  
-[Consulter le rapport VirusTotal](https://www.virustotal.com/gui/file/f75d945673266ad6856a9ac8cf6089ff2994cf39e77998db23658131ff8696b6?nocache=1)
+[Consulter le rapport VirusTotal](https://www.virustotal.com/gui/file-analysis/MGM1NzA5YmFlNGM0ZmRkMDc4OTYzOTczYjFkZTgwODk6MTc3NzQxNDYyOA==)
 
 ---
 
