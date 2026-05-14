@@ -1,5 +1,7 @@
 # FortniteStatsDesktop
 
+[![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc/4.0/)
+
 **FortniteStatsDesktop** est une application Windows performante et moderne conçue pour l'analyse locale et automatique des fichiers de rediffusion (.replay) de Fortnite. 
 
 Elle permet aux joueurs de suivre leurs performances, d'analyser leurs statistiques de combat et de visualiser l'historique de leurs parties avec une précision chirurgicale, sans dépendre de services tiers lents ou payants.
