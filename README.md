@@ -66,3 +66,6 @@ L'application analyse des fichiers locaux uniquement et n'envoie aucune donnée 
 
 ## 📄 Licence
 Ce projet est destiné à un usage personnel et éducatif. Tous les droits sur les noms et contenus liés à Fortnite appartiennent à Epic Games, Inc.
+This work is licensed under the Creative Commons Attribution-NonCommercial 4.0 International License. 
+To view a copy of this license, visit http://creativecommons.org/licenses/by-nc/4.0/.
+
